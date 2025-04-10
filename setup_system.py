@@ -7,7 +7,7 @@ import MDAnalysis as mda
 import random
 import os 
 import pandas as pd
-#home_dire=os.environ["WEST_SIM_ROOT"]
+home_dire=os.environ["WEST_SIM_ROOT"]
 def move_dimer(u,space):
     #move to (0,0,0)
     #move to space with random orientation
@@ -118,25 +118,25 @@ def native_contact_list(m1,m2,u):
     return native_contact_atoms   
 
 
-def contact_list_new(monomer_type,monomer_num,u):
+def contact_list_new(monomer_type,monomer_num,u,ubound):
     if(monomer_type)=='A':
         if((monomer_num-1)%5==0):
             sle_string='A'+str(monomer_num+4)
         else:
             sle_string='A'+str((monomer_num-1))
         #print(sle_string)
-        sle=u.select_atoms('segid '+sle_string)
+        sle=ubound.select_atoms('segid '+sle_string)
     if(monomer_type)=='B':
-        sle=u.select_atoms(f"(around 9 segid B{monomer_num}) and not chainID D and not segid A{monomer_num}")
+        sle=ubound.select_atoms(f"(around 9 segid B{monomer_num}) and not chainID D and not segid A{monomer_num}")
     if(monomer_type)=='C':
-        sle=u.select_atoms(f"(around 9 segid C{monomer_num}) and not chainID A and not chainID B and not segid D{monomer_num}")
+        sle=ubound.select_atoms(f"(around 9 segid C{monomer_num}) and not chainID A and not chainID B and not segid D{monomer_num}")
     if(monomer_type)=='D':
-        sle=u.select_atoms(f"(around 9 segid D{monomer_num}) and not chainID C and not chainID A")
+        sle=ubound.select_atoms(f"(around 9 segid D{monomer_num}) and not chainID C and not chainID A")
     if(len(list(set(sle.segids)))==0):
         return []
     m2=list(set(sle.segids))[0]
     m1=monomer_type+str(monomer_num)
-    contactlist=pd.read_csv('./'+monomer_type+'_contacts.txt',sep='\t',header=None)
+    contactlist=pd.read_csv(home_dire+'/'+monomer_type+'_contacts.txt',sep='\t',header=None)
     native_contact_atoms=[]
     for i in range(len(contactlist)):
         mgroup=u.atoms[[]]

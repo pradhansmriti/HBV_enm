@@ -10,7 +10,7 @@ import random
 import setup_system
 import MDAnalysis as mda
 import os
-#home_dire=os.environ["WEST_SIM_ROOT"]
+home_dire=os.environ["WEST_SIM_ROOT"]
 forcefield=ForceField('charmm36.xml','charmm36/water.xml')
 class ForceReporter(object):
     def __init__(self, file, reportInterval):
@@ -60,7 +60,7 @@ class MDsteps():
             max_crds[1] = max(max_crds[1], coord[1])
             max_crds[2] = max(max_crds[2], coord[2])
         system=forcefield.createSystem(self.pdb.topology,nonbondedMethod=CutoffNonPeriodic)
-        system.setDefaultPeriodicBoxVectors(Vec3(13.0*nanometer,0,0),Vec3(0,13.0*nanometer,0),Vec3(0,0,13.0*nanometer))
+        system.setDefaultPeriodicBoxVectors(Vec3(17.0*nanometer,0,0),Vec3(0,17.0*nanometer,0),Vec3(0,0,17.0*nanometer))
         return system
     def create_harmonic_bonds(self,system,bond_strength,dimer_list):
         #define bond strength and equilibrium bond distance
@@ -68,7 +68,7 @@ class MDsteps():
         #num_bonds=harmonic_bond_og.getNumBonds()
         #Read bonded parameters and change the bond strength
         for i in range(len(dimer_list)):
-            dimer_bonds_txt=np.loadtxt('./connect_files/cg_'+dimer_list[i]+'_connectivity.txt').T
+            dimer_bonds_txt=np.loadtxt(home_dire+'/connect_files/cg_'+dimer_list[i]+'_connectivity.txt').T
             dimer_bond_number=len(dimer_bonds_txt[0][:])
             for bond_number in range(dimer_bond_number):
                 index1=298*i+int(dimer_bonds_txt[0][bond_number])-1
@@ -109,7 +109,7 @@ class MDsteps():
             force_repulsion.addParticle()
         system.addForce(force_repulsion)
     
-    def add_gaussian_nativec(self,system,energy_attraction,u):
+    def add_gaussian_nativec(self,system,energy_attraction,u,ubound):
         r_cutoff_g=3.0*nanometer
         expr_gaussian_native_contacts="-Eatt*(A*exp(-B*r^2)+C*exp(-D*r^2))*step(r_ncg-r)"
         force_native_contacts=openmm.CustomNonbondedForce(expr_gaussian_native_contacts)
@@ -129,10 +129,10 @@ class MDsteps():
         #ABCDpairs=ABCDpairs+setup_system.native_contact_list('E','A',u)
         ABCDpairs=[]
         for i in range(1,61):
-            ABCDpairs=ABCDpairs+setup_system.contact_list_new('A',i,u)
-            ABCDpairs=ABCDpairs+setup_system.contact_list_new('B',i,u)
-            ABCDpairs=ABCDpairs+setup_system.contact_list_new('C',i,u)
-            ABCDpairs=ABCDpairs+setup_system.contact_list_new('D',i,u)
+            ABCDpairs=ABCDpairs+setup_system.contact_list_new('A',i,u,ubound)
+            ABCDpairs=ABCDpairs+setup_system.contact_list_new('B',i,u,ubound)
+            ABCDpairs=ABCDpairs+setup_system.contact_list_new('C',i,u,ubound)
+            ABCDpairs=ABCDpairs+setup_system.contact_list_new('D',i,u,ubound)
         print(ABCDpairs)
         ABCDpairs=np.asarray(ABCDpairs)-1
         number_native_contacts=len(ABCDpairs)
@@ -149,11 +149,12 @@ def main_simulation(energy_repulsion,energy_attraction):
     print("HERE")
     start_time=time.time()
     dimer_list=[]
-    for i in range(1,61):
+    for i in range(1,6):
         dimer_list.append(f'A{i}B{i}')
         dimer_list.append(f'C{i}D{i}')
     #setup_system.create_system_pdb(dimer_list)
-    pdbfile='./abcd_capsid.pdb'
+    ubound=mda.Universe(home_dire+'/decamer_avg.pdb')
+    pdbfile=home_dire+'/decamer_sep.pdb'
     u_system=mda.Universe(pdbfile)
     #define the system
     mdsteps=MDsteps(pdbfile)
@@ -173,7 +174,7 @@ def main_simulation(energy_repulsion,energy_attraction):
 
     #add all the forces we want: repulsive,attractive, anything else
     mdsteps.add_cosine_repulsion(system,energy_repulsion)
-    mdsteps.add_gaussian_nativec(system,energy_attraction,u_system)
+    mdsteps.add_gaussian_nativec(system,energy_attraction,u_system,ubound)
     print(system.getForces())
     print("HERE")
     #define the integrator and simulation variables
@@ -187,19 +188,19 @@ def main_simulation(energy_repulsion,energy_attraction):
     simulation.context.setPositions(mdsteps.pdb.positions)
     ##########################MINIMIZATION#######################
     #minimization of initial structure
-    simulation.minimizeEnergy(tolerance=0.1)
-    simulation.saveState(f'minimized_{energy_repulsion}_{energy_attraction}.xml')
-    minpositions = simulation.context.getState(getPositions=True).getPositions()
-    with open(f'minimized_{energy_repulsion}_{energy_attraction}.pdb', 'w') as f:
-           PDBFile.writeFile(mdsteps.pdb.topology, minpositions, f)
+    #simulation.minimizeEnergy(tolerance=0.1)
+    #simulation.saveState(f'parent.xml')
+    #minpositions = simulation.context.getState(getPositions=True).getPositions()
+    #with open(f'minimized_{energy_repulsion}_{energy_attraction}.pdb', 'w') as f:
+    #       PDBFile.writeFile(mdsteps.pdb.topology, minpositions, f)
     #open minimized state or whatever state we want to continue our simulation from
    
-    simulation.loadState(f'minimized_{energy_repulsion}_{energy_attraction}.xml')
-    simulation.reporters.append(DCDReporter('seg.dcd', 2000,enforcePeriodicBox=False))
-    simulation.reporters.append(StateDataReporter('seg.csv', 2000, step=True, kineticEnergy=True, potentialEnergy=True, totalEnergy=True, temperature=True))
+    simulation.loadState(f'parent.xml')
+    simulation.reporters.append(DCDReporter('seg.dcd', 5000,enforcePeriodicBox=False))
+    simulation.reporters.append(StateDataReporter('seg.csv', 5000, step=True, kineticEnergy=True, potentialEnergy=True, totalEnergy=True, temperature=True))
     print("HERE")
     #run the simulation for however many time steps
-    simulation.step(40000)
+    simulation.step(10000)
     simulation.saveState('seg.xml')
     finalpositions = simulation.context.getState(getPositions=True).getPositions()
     with open(f'final_{energy_repulsion}_{energy_attraction}.pdb', 'w') as f:
