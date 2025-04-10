@@ -132,6 +132,8 @@ def contact_list_new(monomer_type,monomer_num,u):
         sle=u.select_atoms(f"(around 9 segid C{monomer_num}) and not chainID A and not chainID B and not segid D{monomer_num}")
     if(monomer_type)=='D':
         sle=u.select_atoms(f"(around 9 segid D{monomer_num}) and not chainID C and not chainID A")
+    if(len(list(set(sle.segids)))==0):
+        return []
     m2=list(set(sle.segids))[0]
     m1=monomer_type+str(monomer_num)
     contactlist=pd.read_csv('./'+monomer_type+'_contacts.txt',sep='\t',header=None)
