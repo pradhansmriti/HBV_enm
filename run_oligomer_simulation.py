@@ -10,7 +10,9 @@ import random
 import setup_system
 import MDAnalysis as mda
 import os
+#home_dire environment that has all relevant pdb, connectivity files
 home_dire=os.environ["WEST_SIM_ROOT"]
+#define openmm forcefield just to initialize the system
 forcefield=ForceField('charmm36.xml','charmm36/water.xml')
 class ForceReporter(object):
     def __init__(self, file, reportInterval):
@@ -64,8 +66,7 @@ class MDsteps():
         return system
     def create_harmonic_bonds(self,system,bond_strength,dimer_list):
         #define bond strength and equilibrium bond distance
-        harmonic_bond=HarmonicBondForce()
-        #num_bonds=harmonic_bond_og.getNumBonds()
+        harmonic_bond=HarmonicBondForce() 
         #Read bonded parameters and change the bond strength
         for i in range(len(dimer_list)):
             dimer_bonds_txt=np.loadtxt(home_dire+'/connect_files/cg_'+dimer_list[i]+'_connectivity.txt').T
@@ -80,13 +81,11 @@ class MDsteps():
                 r0=distance
                 kappa_bond =bond_strength*kilojoule/(nanometer**2*mole)
                 harmonic_bond.addBond(index1,index2,r0,kappa_bond)
-        #harmonic_bond.setUsesPeriodicBoundaryConditions(True)
-#print(f"harmonic bond force group: {harmonic_bond.getForceGroup()}")
-#        print(f"number of h bonds={harmonic_bond.getNumBonds()}")
         system.addForce(harmonic_bond)
                 #return system
     def remove_nonbonded_forces(self,system):
-        #remove all predefined non-bonded forces if we don't want them
+        #remove all predefined non-bonded forces; we are defining our custom non-bonded forces
+        #non-bonded force is 4th force in the default system definition
         nonbonded_og=system.getForce(4)
         for index in range(nonbonded_og.getNumParticles()):
             charge,sigma,epsilon=nonbonded_og.getParticleParameters(index)
@@ -95,6 +94,7 @@ class MDsteps():
             sigma=0
             nonbonded_og.setParticleParameters(index,charge,sigma,epsilon)
     def add_cosine_repulsion(self,system,energy_repulsion):
+        #ensure exluded volume for the particles; parameters from voth paper
         r_cutoff=1.5*nanometer
         energy_repulsion_c=0.1184*kilojoule/(mole)
         energy_expr_repulsion="energy_scale*(1+cos((PI*r)/r_nc))"
@@ -105,11 +105,14 @@ class MDsteps():
         force_repulsion.setNonbondedMethod(openmm.NonbondedForce.CutoffNonPeriodic)
         force_repulsion.setCutoffDistance(r_cutoff)
         num_particles=system.getNumParticles()
+        #add cosine repulsion for all particles
         for i in range(num_particles):
             force_repulsion.addParticle()
         system.addForce(force_repulsion)
     
     def add_gaussian_nativec(self,system,energy_attraction,u,ubound):
+        #key native contacts fron all-atom simulations
+        ## TODO: fine tune A,B,C,D with all-atom simulation data 
         r_cutoff_g=3.0*nanometer
         expr_gaussian_native_contacts="-Eatt*(A*exp(-B*r^2)+C*exp(-D*r^2))*step(r_ncg-r)"
         force_native_contacts=openmm.CustomNonbondedForce(expr_gaussian_native_contacts)
