@@ -126,19 +126,17 @@ class MDsteps():
         force_native_contacts.setNonbondedMethod(openmm.NonbondedForce.CutoffNonPeriodic)
         force_native_contacts.setCutoffDistance(r_cutoff_g)
         #Native contact pairs according to all-atom simulations
-
-        #ABCDpairs=setup_system.native_contact_list('B1','C1',u)
-        #ABCDpairs=ABCDpairs+setup_system.native_contact_list('D','F',u)
-        #ABCDpairs=ABCDpairs+setup_system.native_contact_list('E','A',u)
         ABCDpairs=[]
+        #add native contacts for each interface: A site(AA interface), B site(BC interface), C site(CD interface), D site(DB interface)
         for i in range(1,61):
             ABCDpairs=ABCDpairs+setup_system.contact_list_new('A',i,u,ubound)
             ABCDpairs=ABCDpairs+setup_system.contact_list_new('B',i,u,ubound)
             ABCDpairs=ABCDpairs+setup_system.contact_list_new('C',i,u,ubound)
             ABCDpairs=ABCDpairs+setup_system.contact_list_new('D',i,u,ubound)
-        print(ABCDpairs)
+        #print(ABCDpairs)
         ABCDpairs=np.asarray(ABCDpairs)-1
         number_native_contacts=len(ABCDpairs)
+        #add each contact as an interaction group
         for i in range(number_native_contacts):
             d1index=ABCDpairs[i][0]
             d2index=ABCDpairs[i][1]
@@ -148,44 +146,34 @@ class MDsteps():
             force_native_contacts.addParticle()
         system.addForce(force_native_contacts)
 
-def main_simulation(energy_repulsion,energy_attraction):
-    print("HERE")
+def main_simulation(energy_repulsion,energy_attraction): 
     start_time=time.time()
     dimer_list=[]
+    #number of dimers we want to simulate+ what kind and number(Example: Decamer has-(A1B1-A5B5,C1D1-C5D5))
     for i in range(1,6):
         dimer_list.append(f'A{i}B{i}')
         dimer_list.append(f'C{i}D{i}')
-    #setup_system.create_system_pdb(dimer_list)
+    #ubound has native contact definitions from bound state
     ubound=mda.Universe(home_dire+'/decamer_avg.pdb')
+    #pdb file we want to simulate
     pdbfile=home_dire+'/decamer_sep.pdb'
     u_system=mda.Universe(pdbfile)
     #define the system
     mdsteps=MDsteps(pdbfile)
     system=mdsteps.new_system(5)
-    print(system.getForce)
     #add bonded forces
-    print(dimer_list)
     mdsteps.create_harmonic_bonds(system,41840,dimer_list)
-    print(system.getForces())
-    print("HERE")
-    #print(system.getForce(8).getNumBonds())
-
     #remove pre-assigned non-bonded forces (it tries to create LJ potential)
     mdsteps.remove_nonbonded_forces(system)
     system.removeForce(4)
-    system.removeForce(4)
-
+    
     #add all the forces we want: repulsive,attractive, anything else
     mdsteps.add_cosine_repulsion(system,energy_repulsion)
     mdsteps.add_gaussian_nativec(system,energy_attraction,u_system,ubound)
-    print(system.getForces())
-    print("HERE")
     #define the integrator and simulation variables
     integrator=LangevinIntegrator(300*kelvin, 2/picosecond, 10.0*femtoseconds)
-    #integrator=LangevinIntegrator(300*kelvin, 2/picosecond, 10*femtoseconds)
-    print("HERE")
     integrator.setRandomNumberSeed(random.randint(0,1000))
-    print(integrator.getRandomNumberSeed())
+    #define platform might be useful for GPU simulations
     #platform = Platform.getPlatformByName('CUDA') 
     simulation=Simulation(mdsteps.pdb.topology, system, integrator)
     simulation.context.setPositions(mdsteps.pdb.positions)
@@ -197,15 +185,19 @@ def main_simulation(energy_repulsion,energy_attraction):
     #with open(f'minimized_{energy_repulsion}_{energy_attraction}.pdb', 'w') as f:
     #       PDBFile.writeFile(mdsteps.pdb.topology, minpositions, f)
     #open minimized state or whatever state we want to continue our simulation from
-   
+    #simulation.loadState(f'minimized_{energy_repulsion}_{energy_attraction}.xml') 
+    ###############RUN SIMULATION##########################
+    #if we are startinf from a minimized state or a previously saved state
     simulation.loadState(f'parent.xml')
+    #reporters to save the simulation data and frequency
     simulation.reporters.append(DCDReporter('seg.dcd', 5000,enforcePeriodicBox=False))
     simulation.reporters.append(StateDataReporter('seg.csv', 5000, step=True, kineticEnergy=True, potentialEnergy=True, totalEnergy=True, temperature=True))
-    print("HERE")
     #run the simulation for however many time steps
     simulation.step(10000)
+    #save final state as xml which can be used for restarting the simulation
     simulation.saveState('seg.xml')
     finalpositions = simulation.context.getState(getPositions=True).getPositions()
+    #save final state positions as a pdb file 
     with open(f'final_{energy_repulsion}_{energy_attraction}.pdb', 'w') as f:
        PDBFile.writeFile(mdsteps.pdb.topology, finalpositions, f)
     final_time=time.time()
